@@ -208,9 +208,9 @@ class CarService:
         with open(self.path_cars_file, 'r+') as cars_file:
             # обновляем старый VIN на новый
             cars_file.seek(car_index)
-            entry = cars_file.readline().rstrip().split(';')
-            entry[0] = new_vin
-            upd_entry = ';'.join(entry)
+            car_entry = cars_file.readline().rstrip().split(';')
+            car_entry[0] = new_vin
+            upd_entry = ';'.join(car_entry)
             cars_file.seek(car_index)
             cars_file.write(upd_entry.ljust(500) + '\n')
         with open(self.path_cars_index_file, 'r') as cars_index_file:
@@ -218,13 +218,22 @@ class CarService:
             upd_data = []
             entries = cars_index_file.readlines()
             for entry in entries:
-                entry_split = entry.split(';')
-                if vin == entry_split[0]:
-                    entry_split[0] = new_vin
-                upd_data.append(';'.join(entry_split))
+                entry = entry.split(';')
+                if vin == entry[0]:
+                    entry[0] = new_vin
+                upd_data.append(';'.join(entry))
         with open(self.path_cars_index_file, 'w') as cars_index_file:
             # перезаписываем файл с индексами авто
             cars_index_file.writelines(upd_data)
+        return Car(
+            vin=new_vin,
+            model=int(car_entry[1]),
+            price=Decimal(car_entry[2]),
+            date_start=datetime.strptime(
+                            car_entry[3], '%Y-%m-%d %H:%M:%S'
+                        ),
+            status=car_entry[4]
+        )
 
     def revert_sale(self, sales_number: str) -> Car:
         """Метод принимает в качестве аргумента номер несостоявшейся продажи,
@@ -286,50 +295,51 @@ class CarService:
         с учетом ее цены, делает срез с тремя самыми продаваемыми моделями,
         возвращает список с объектами ModelSaleStats.
         """
-        sold_models_data = {}
-        model_prices = {}
-        top_list = []
-        with open(self.path_models_file, 'r') as f:
-            model_entries = f.readlines()
-            for entry in model_entries:
-                # заполняем словарь с данными по проданным моделям
-                # используем id моделей в качестве ключей
-                entry_split = entry.split(';')
-                sold_models_data[entry_split[0]] = 0
-        with open(self.path_cars_file, 'r') as f:
-            car_entries = f.readlines()
-            for entry in car_entries:
-                # проверяем записи с параметром sold, извлекаем id модели
-                # подсчитываем количество продаж конкретной модели
-                entry_split = entry.rstrip().split(';')
-                if entry_split[4] == 'sold':
-                    sold_models_data[entry_split[1]] += 1
-        with open(self.path_sales_file, 'r') as f:
-            sale_entries = f.readlines()
-            for entry in car_entries:
-                entry_split = entry.split(';')
-                car_vin = entry_split[0]
-                model_id = entry_split[1]
-                for entry in sale_entries:
-                    entry_split = entry.rstrip().split(';')
-                    sale_cost = entry_split[3]
-                    # получаем цены проданных моделей
-                    if car_vin == entry_split[1]:
-                        model_prices[model_id] = sale_cost
-        # сортируем модели по количеству продаж и цене, формируем топ-3
-        sorted_data = sorted(
-            sold_models_data.items(),
-            key=lambda x: (-x[1], -int(model_prices.get(x[0], 0)))
-        )[:3]
-        for model_id, sale_count in sorted_data:
-            for entry in model_entries:
-                entry_split = entry.rstrip().split(';')
-                if model_id == entry_split[0]:
-                    top_list.append(
-                        ModelSaleStats(
-                            car_model_name=entry_split[1],
-                            brand=entry_split[2],
-                            sales_number=sale_count
-                        )
-                    )
-        return top_list
+        model_sales = {}
+        car_vin = None
+        car_index = None
+        with open(self.path_sales_file, 'r') as sales_file:
+            # находим VIN авто в продажах
+            for entry in sales_file:
+                car_vin = entry.split(';')[1]
+                with open(self.path_cars_index_file, 'r') as cars_index_file:
+                    # ищем VIN для получения индекса авто
+                    for entry in cars_index_file:
+                        if car_vin == entry.split(';')[0]:
+                            car_index = int(entry.rstrip().split(';')[1])
+                            with open(self.path_cars_file, 'r') as cars_file:
+                                # по индексу находим авто и извлекаем id модели
+                                cars_file.seek(car_index)
+                                car_entry = cars_file.readline()
+                                model_id = int(car_entry.split(';')[1])
+                                # считаем количество продаж по каждой модели
+                                if model_id not in model_sales:
+                                    model_sales[model_id] = 1
+                                else:
+                                    model_sales[model_id] += 1
+        sorted_model_sales = sorted(
+            model_sales.items(), key=lambda x: x[1], reverse=True
+        )
+        # извлекаем id трех самых продаваемых моделей
+        model_ids = [model_id for model_id, _ in sorted_model_sales[:3]]
+        top_models = []
+        model_index = None
+        with open(self.path_models_index_file, 'r') as models_index_file:
+            # находим индекс модели
+            for entry in models_index_file:
+                for id in model_ids:
+                    if id == int(entry.split(';')[0]):
+                        model_index = int(entry.rstrip().split(';')[1])
+                        with open(self.path_models_file, 'r') as models_file:
+                            # извлекаем информацию о модели
+                            models_file.seek(model_index)
+                            model_entry = (
+                                models_file.readline().rstrip().split(';')
+                            )
+                            data = ModelSaleStats(
+                                car_model_name=model_entry[1],
+                                brand=model_entry[2],
+                                sales_number=model_sales.get(id, 0)
+                            )
+                            top_models.append(data)
+        return top_models
