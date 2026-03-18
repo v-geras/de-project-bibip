@@ -122,17 +122,17 @@ class CarService:
             cars_available = []
             for entry in cars_file:
                 if status in entry:
-                    entry_split = entry.rstrip().split(';')
+                    car_entry = entry.rstrip().split(';')
                     cars_available.append(
                         Car(
-                            vin=entry_split[0],
-                            model=int(entry_split[1]),
-                            price=Decimal(entry_split[2]),
+                            vin=car_entry[0],
+                            model=int(car_entry[1]),
+                            price=Decimal(car_entry[2]),
                             date_start=datetime.strptime(
-                                            entry_split[3],
+                                            car_entry[3],
                                             '%Y-%m-%d %H:%M:%S'
                                         ),
-                            status=entry_split[4]
+                            status=car_entry[4]
                         )
                     )
         # сортируем выборку по VIN-коду авто
@@ -199,37 +199,32 @@ class CarService:
         в качестве аргументов старый и новый идетификаторы, возвращает
         объект класса Car.
         """
-        with open(self.path_cars_file, 'r') as f:
-            car_entries = f.readlines()
-            car_entries_upd = []
-            for entry in car_entries:
-                entry_split = entry.rstrip().split(';')
-                if vin in entry_split:
-                    entry_split[0] = new_vin
-                    car_upd_vin = Car(
-                        vin=entry_split[0],
-                        model=int(entry_split[1]),
-                        price=Decimal(entry_split[2]),
-                        date_start=datetime.strptime(
-                                        entry_split[3], '%Y-%m-%d %H:%M:%S'
-                                    ),
-                        status=entry_split[4]
-                    )
-                car_entries_upd.append(';'.join(entry_split) + '\n')
-        with open(self.path_cars_file, 'w') as f:
-            f.writelines(car_entries_upd)
-        with open(self.path_cars_index_file, 'r') as f:
-            # обновляем данные в файле с индексами авто
-            car_idx_entries = f.readlines()
-            car_idx_entries_upd = []
-            for entry in car_idx_entries:
+        car_index = None
+        with open(self.path_cars_index_file, 'r') as cars_index_file:
+            for entry in cars_index_file:
+                entry_vin, index = entry.rstrip().split(';')
+                if entry_vin == vin:
+                    car_index = int(index)
+        with open(self.path_cars_file, 'r+') as cars_file:
+            # обновляем старый VIN на новый
+            cars_file.seek(car_index)
+            entry = cars_file.readline().rstrip().split(';')
+            entry[0] = new_vin
+            upd_entry = ';'.join(entry)
+            cars_file.seek(car_index)
+            cars_file.write(upd_entry.ljust(500) + '\n')
+        with open(self.path_cars_index_file, 'r') as cars_index_file:
+            # обновляем индекс авто
+            upd_data = []
+            entries = cars_index_file.readlines()
+            for entry in entries:
                 entry_split = entry.split(';')
-                if vin in entry_split:
+                if vin == entry_split[0]:
                     entry_split[0] = new_vin
-                car_idx_entries_upd.append(';'.join(entry_split))
-        with open(self.path_cars_index_file, 'w') as f:
-            f.writelines(car_idx_entries_upd)
-        return car_upd_vin
+                upd_data.append(';'.join(entry_split))
+        with open(self.path_cars_index_file, 'w') as cars_index_file:
+            # перезаписываем файл с индексами авто
+            cars_index_file.writelines(upd_data)
 
     def revert_sale(self, sales_number: str) -> Car:
         """Метод принимает в качестве аргумента номер несостоявшейся продажи,
