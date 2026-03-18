@@ -42,167 +42,163 @@ class CarService:
             self.root_directory_path, 'sales_index.txt'
         )
 
-    # Задание 1. Сохранение автомобилей и моделей
     def add_model(self, model: Model) -> Model:
         """Метод принимает в качестве аргумента объект класса Model,
         делает запись в файлах models.txt и models_index.txt,
         возращает объект класса Model.
         """
-        with open(self.path_models_file, 'a') as f:
-            f.write(f'{model.id};{model.name};{model.brand}\n')
-        with open(self.path_models_file, 'r') as f:
-            model_entries = f.readlines()
-        with open(self.path_models_index_file, 'w') as f:
-            for line_num, model_data in enumerate(model_entries, start=1):
-                # извлекаем id модели и записываем его вместе с номером строки
-                f.write(f'{model_data.split(';')[1]},{line_num}\n')
+        with open(self.path_models_file, 'a') as models_file:
+            # определяем позицию для вычесления индекса
+            model_index = models_file.tell()
+            new_entry = f'{model.id};{model.name};{model.brand}'.ljust(500)
+            models_file.write(new_entry + '\n')
+        with open(self.path_models_index_file, 'a') as models_index_file:
+            models_index_file.write(f'{model.id};{model_index}\n')
         return model
 
-    # Задание 1. Сохранение автомобилей и моделей
     def add_car(self, car: Car) -> Car:
         """Метод принимает в качестве аргумента объект класса Car,
         делает запись в файлах cars.txt и cars_index.txt,
         возращает объект класса Car.
         """
-        with open(self.path_cars_file, 'a') as f:
-            f.write(
+        with open(self.path_cars_file, 'a') as cars_file:
+            # определяем позицию для вычесления индекса
+            car_index = cars_file.tell()
+            new_entry = (
                 f'{car.vin};{car.model};{car.price};'
-                f'{car.date_start};{car.status}\n'
+                f'{car.date_start};{car.status}'.ljust(500)
             )
-        with open(self.path_cars_file, 'r') as f:
-            car_entries = f.readlines()
-        with open(self.path_cars_index_file, 'w') as f:
-            for line_num, car_data in enumerate(car_entries, start=1):
-                # извлекаем id авто и записываем его вместе с номером строки
-                f.write(f'{car_data.split(';')[0]};{line_num}\n')
+            cars_file.write(new_entry + '\n')
+        with open(self.path_cars_index_file, 'a') as car_index_file:
+            car_index_file.write(f'{car.vin};{car_index}\n')
         return car
 
-    # Задание 2. Сохранение продаж.
     def sell_car(self, sale: Sale) -> Car:
         """Метод принимает в качестве аргумента объект класса Sale,
         делает запись в файлах sales.txt и sales_index.txt,
         возращает объект класса Car (проданное авто).
         """
-        with open(self.path_sales_file, 'a') as f:
-            f.write(
+        with open(self.path_sales_file, 'a') as sales_file:
+            # определяем позицию для вычесления индекса
+            sale_index = sales_file.tell()
+            new_entry = (
                 f'{sale.sales_number};{sale.car_vin};'
-                f'{sale.sales_date};{sale.cost}\n'
+                f'{sale.sales_date};{sale.cost}'.ljust(500)
             )
-        with open(self.path_sales_file, 'r') as f:
-            sale_entries = f.readlines()
-        with open(self.path_sales_index_file, 'w') as f:
-            for line_num, sale_data in enumerate(sale_entries, start=1):
-                # извлекаем номер продажи
-                # и записываем его вместе с номером строки
-                f.write(f'{sale_data.split(';')[0]};{line_num}\n')
-        with open(self.path_cars_file, 'r') as f:
-            car_entries = f.readlines()
-            car_entries_upd = []
-            sold_car = None
-            for entry in car_entries:
-                entry_split = entry.rstrip().split(';')
-                if sale.car_vin in entry_split:
-                    entry_split[-1] = 'sold'
-                    sold_car = Car(
-                        vin=entry_split[0],
-                        model=int(entry_split[1]),
-                        price=Decimal(entry_split[2]),
-                        date_start=datetime.strptime(
-                                        entry_split[3], '%Y-%m-%d %H:%M:%S'
-                                    ),
-                        status=CarStatus.sold
-                    )
-                car_entries_upd.append(';'.join(entry_split) + '\n')
-        with open(self.path_cars_file, 'w') as f:
-            f.writelines(car_entries_upd)
-        return sold_car
+            sales_file.write(new_entry + '\n')
+        with open(self.path_sales_index_file, 'a') as sales_index_file:
+            sales_index_file.write(f'{sale.car_vin};{sale_index}\n')
+        car_index = None
+        with open(self.path_cars_index_file, 'r') as cars_index_file:
+            for entry in cars_index_file:
+                vin, index = entry.rstrip().split(';')
+                if vin == sale.car_vin:
+                    car_index = int(index)
+                    break
+        # меняем статус авто на sold
+        with open(self.path_cars_file, 'r+') as cars_file:
+            cars_file.seek(car_index)
+            car_entry = cars_file.readline().rstrip().split(';')
+            car_entry[4] = CarStatus.sold
+            cars_file.seek(car_index)
+            new_entry = ';'.join(car_entry).ljust(500)
+            cars_file.write(new_entry + '\n')
+        return Car(
+            vin=car_entry[0],
+            model=int(car_entry[1]),
+            price=Decimal(car_entry[2]),
+            date_start=datetime.strptime(
+                            car_entry[3], '%Y-%m-%d %H:%M:%S'
+                        ),
+            status=car_entry[4]
+        )
 
-    # Задание 3. Доступные к продаже
     def get_cars(self, status: CarStatus) -> list[Car]:
         """Метод принимает в качестве аргумета объект класса CarStatus,
         делает выборку доступных к продаже авто (available), сортирует
         данные по VIN-коду, возвращает список с объектами класса Car.
         """
-        with open(self.path_cars_file, 'r') as f:
-            car_entries = f.readlines()
+        with open(self.path_cars_file, 'r') as cars_file:
             cars_available = []
-            for entry in car_entries:
+            for entry in cars_file:
                 if status in entry:
                     entry_split = entry.rstrip().split(';')
-                    car = Car(
-                        vin=entry_split[0],
-                        model=int(entry_split[1]),
-                        price=Decimal(entry_split[2]),
-                        date_start=datetime.strptime(
-                                        entry_split[3], '%Y-%m-%d %H:%M:%S'
-                                    ),
-                        status=status
+                    cars_available.append(
+                        Car(
+                            vin=entry_split[0],
+                            model=int(entry_split[1]),
+                            price=Decimal(entry_split[2]),
+                            date_start=datetime.strptime(
+                                            entry_split[3],
+                                            '%Y-%m-%d %H:%M:%S'
+                                        ),
+                            status=entry_split[4]
+                        )
                     )
-                    cars_available.append(car)
-            # сортируем выборку по VIN-коду авто
-            # cars_available.sort(key=lambda x: x.vin)
-            # в чате study выяснили, что тест ругается на сортировку
-            # и поэтому можно закомментить
+        # сортируем выборку по VIN-коду авто
+        # cars_available.sort(key=lambda x: x.vin)
+        # в чате study выяснили, что тест ругается на сортировку
+        # и поэтому можно закомментить
         return cars_available
 
-    # Задание 4. Детальная информация
     def get_car_info(self, vin: str) -> CarFullInfo | None:
         """Метод принимает в качестве аргумента VIN-код автомобиля,
         возращает объект класса CarFullInfo с детальной информацией
         о машине либо None.
         """
-        with open(self.path_cars_file, 'r') as f:
-            car_entries = f.readlines()
-        with open(self.path_models_file, 'r') as f:
-            model_entries = f.readlines()
-        car_sales_date = None
-        car_sales_cost = None
-        car_full_data = None
-        for entry in car_entries:
+        car_index = None
+        sales_date = None
+        sales_cost = None
+        with open(self.path_cars_index_file, 'r') as cars_index_file:
+            for entry in cars_index_file:
+                index_vin, index = entry.rstrip().split(';')
+                if index_vin == vin:
+                    car_index = int(index)
+                    break
+        if car_index is None:
+            return None
+        with open(self.path_cars_file, 'r') as cars_file:
             # извлекаем данные об авто
-            if vin in entry:
-                car_entry_split = entry.rstrip().split(';')
-                model_id = car_entry_split[1]
-                car_price = car_entry_split[2]
-                car_date_start = car_entry_split[3]
-                car_status = car_entry_split[4]
-                for entry in model_entries:
-                    # извлекаем данные о модели
-                    if model_id in entry:
-                        model_entry_split = entry.rstrip().split(';')
-                        model_name = model_entry_split[1]
-                        model_brand = model_entry_split[2]
-                if car_status == 'sold':
-                    with open(self.path_sales_file, 'r') as f:
-                        sale_entries = f.readlines()
-                        for entry in sale_entries:
-                            # извлекаем данные о продаже
-                            if vin in entry:
-                                sale_entry_split = entry.rstrip().split(';')
-                                car_sales_date = sale_entry_split[2]
-                                car_sales_cost = sale_entry_split[3]
-                # формируем профайл
-                car_full_data = CarFullInfo(
-                    vin=vin,
-                    car_model_name=model_name,
-                    car_model_brand=model_brand,
-                    price=Decimal(car_price),
-                    date_start=datetime.strptime(
-                        car_date_start, '%Y-%m-%d %H:%M:%S'
-                    ),
-                    status=CarStatus(car_status),
-                    sales_date=car_sales_date,
-                    sales_cost=car_sales_cost
-                )
-        return car_full_data
+            cars_file.seek(car_index)
+            car_entry = cars_file.readline().rstrip().split(';')
+        with open(self.path_models_file, 'r') as models_file:
+            # извлекаем данные о модели
+            for entry in models_file:
+                model_entry = entry.rstrip().split(';')
+                if model_entry[0] == car_entry[1]:
+                    model_name = model_entry[1]
+                    model_brand = model_entry[2]
+                    break
+        if car_entry[4] == CarStatus.sold:
+            with open(self.path_sales_file, 'r') as sales_files:
+                # извлекаем данные о продаже
+                for entry in sales_files:
+                    sale_entry = entry.rstrip().split(';')
+                    if sale_entry[1] == vin:
+                        sales_date = datetime.strptime(
+                            sale_entry[2],
+                            '%Y-%m-%d %H:%M:%S'
+                        )
+                        sales_cost = Decimal(sale_entry[3])
+        return CarFullInfo(
+            vin=car_entry[0],
+            car_model_name=model_name,
+            car_model_brand=model_brand,
+            price=Decimal(car_entry[2]),
+            date_start=datetime.strptime(
+                car_entry[3],
+                '%Y-%m-%d %H:%M:%S'
+            ),
+            status=car_entry[4],
+            sales_date=sales_date,
+            sales_cost=sales_cost
+        )
 
-    # Задание 5. Обновление ключевого поля
     def update_vin(self, vin: str, new_vin: str) -> Car:
         """Метод позволяет скорректировать VIN-код автомобиля, принимает
         в качестве аргументов старый и новый идетификаторы, возвращает
         объект класса Car.
         """
-        # обновляем данные в файле с авто
         with open(self.path_cars_file, 'r') as f:
             car_entries = f.readlines()
             car_entries_upd = []
@@ -235,48 +231,61 @@ class CarService:
             f.writelines(car_idx_entries_upd)
         return car_upd_vin
 
-    # Задание 6. Удаление продажи
     def revert_sale(self, sales_number: str) -> Car:
         """Метод принимает в качестве аргумента номер несостоявшейся продажи,
         удаляет запись продажи, изменяет статус авто на available,
         возвращает объект класса Car.
         """
-        with open(self.path_sales_file, 'r') as f:
-            sale_entries = f.readlines()
-            car_vin = None
-            for entry in sale_entries:
-                # убираем строку с продажей
-                if sales_number in entry:
-                    car_vin = entry.split(';')[1]
-                    sale_entries.remove(entry)
-        with open(self.path_sales_file, 'w') as f:
-            f.writelines(sale_entries)
-        with open(self.path_sales_index_file, 'w') as f:
-            for line_num, sale_data in enumerate(sale_entries, start=1):
-                f.write(f'{sale_data.split(';')[0]};{line_num}\n')
-        with open(self.path_cars_file, 'r') as f:
-            car_entries = f.readlines()
-            car_entries_upd = []
-            for entry in car_entries:
-                entry_split = entry.rstrip().split(';')
-                # возвращаем авто статус available
-                if car_vin in entry_split:
-                    entry_split[4] = CarStatus.available
-                    car = Car(
-                        vin=entry_split[0],
-                        model=int(entry_split[1]),
-                        price=Decimal(entry_split[2]),
-                        date_start=datetime.strptime(
-                                        entry_split[3], '%Y-%m-%d %H:%M:%S'
-                                    ),
-                        status=entry_split[4]
-                    )
-                car_entries_upd.append(';'.join(entry_split) + '\n')
-        with open(self.path_cars_file, 'w') as f:
-            f.writelines(car_entries_upd)
-        return car
+        car_vin = None
+        sale_index = None
+        with open(self.path_sales_file, 'r') as sales_file:
+            sales_entries = sales_file.readlines()
+        for index, sale_data in enumerate(sales_entries):
+            # извлекаем данные о продаже
+            sale_entry = sale_data.rstrip().split(';')
+            if sale_entry[0].rstrip() == sales_number.rstrip():
+                sale_index = index
+                car_vin = sale_entry[1]
+                break
+        car_index = None
+        with open(self.path_cars_file, 'r') as cars_file:
+            cars_entries = cars_file.readlines()
+        for index, sale_data in enumerate(cars_entries):
+            car_data = sale_data.rstrip().split(';')
+            if car_data[0].rstrip() == car_vin.rstrip():
+                car_index = index
+                break
+        with open(self.path_cars_file, 'r+') as cars_file:
+            # возвращаем авто статус available
+            car_data = cars_entries[car_index].rstrip().split(';')
+            car_data[4] = CarStatus.available
+            updated_car_info = ';'.join(car_data).ljust(500)
+            cars_file.seek(0)
+            cars_entries[car_index] = updated_car_info + '\n'
+            cars_file.writelines(cars_entries)
+        sales_entries.pop(sale_index)
+        with open(self.path_sales_file, 'w') as sales_file:
+            # перезаписываем файл продаж
+            sales_file.writelines(sales_entries)
+        with open(self.path_sales_index_file, 'r') as sales_index_file:
+            sales_index_entries = sales_index_file.readlines()
+        with open(self.path_sales_index_file, 'w') as sales_index_file:
+            # перезаписываем файл с индексами продаж
+            for sale_index_entries in sales_index_entries:
+                sale_index_data = sale_index_entries.rstrip().split(';')
+                if sale_index_data[0].rstrip() != car_vin.rstrip():
+                    sales_index_file.write(sale_index_entries)
+        return Car(
+            vin=car_data[0],
+            model=int(car_data[1]),
+            price=Decimal((car_data[2])),
+            date_start=datetime.strptime(
+                car_data[3],
+                '%Y-%m-%d %H:%M:%S'
+            ),
+            status=car_data[4]
+        )
 
-    # Задание 7. Самые продаваемые модели
     def top_models_by_sales(self) -> list[ModelSaleStats]:
         """Метод сортирует данные по количеству продаж каждой модели авто
         с учетом ее цены, делает срез с тремя самыми продаваемыми моделями,
